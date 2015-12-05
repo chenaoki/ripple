@@ -51,10 +51,19 @@
 #include <lifev/core/algorithm/PreconditionerML.hpp>
 #include "heart.hpp"
 
+#include <opencv/cv.hpp>
+#include <opencv/highgui.h>
+
 using namespace LifeV;
 
 Int main ( Int argc, char** argv )
 {
+
+    cv::Mat img = cv::imread("lena.png", CV_LOAD_IMAGE_COLOR);
+    cv::namedWindow("ripple", cv::WINDOW_AUTOSIZE);
+    cv::imshow("ripple", img);
+    cv::waitKey(-1);
+
     //! Initializing Epetra communicator
     MPI_Init (&argc, &argv);
     Epetra_MpiComm Comm (MPI_COMM_WORLD);

@@ -96,7 +96,7 @@ sphere_radius   = 0.5
 
 [../time_discretization]
 initialtime     = 0.
-endtime         = 500
+endtime         = 200
 timestep        = 1
 BDF_order       = 1
 
