@@ -42,393 +42,249 @@
 #include <Epetra_SerialComm.h>
 #endif
 
+#include <opencv/cv.hpp>
+#include <opencv/highgui.h>
 
 #include "heart.hpp"
 
 using namespace LifeV;
-
-typedef RegionMesh<LinearTetra> mesh_Type;
 
 //! Identifiers for heart boundaries
 const Int EPICARDIUM    = 40;
 const Int ENDOCARDIUM   = 60;
 const Int TRUNC_SEC     = 50;
 
-Real zero_scalar ( const Real& /* t */,
-                   const Real& /* x */,
-                   const Real& /* y */,
-                   const Real& /* z */,
-                   const ID& /* i */ )
-{
-    return 0.;
-}
 
 // ===================================================
 //! Constructors
 // ===================================================
 
-Heart::Heart ( Int argc,
-               char** argv )
+Heart::Heart ( GetPot& dataFile ):
+M_heartFctPtr ( NULL ),
+M_ionicModelPtr(NULL),
+M_uFESpacePtr ( NULL ),
+#ifdef BIDOMAIN
+M_FESpacePtr ( NULL ),
+#endif
+M_Uptr(NULL),
+M_Ueptr(NULL),
+M_Fptr(NULL),
+M_uZero ( Heart::zero_scalar_function ),
+M_bcH(),
+M_meshData(),
+M_data(),
+M_dataIonic(dataFile)
 {
-    GetPot command_line (argc, argv);
-    const std::string data_file_name = command_line.follow ("data", 2, "-f", "--file");
-    GetPot dataFile (data_file_name);
 
+    /*-- Initialization --*/
+    LifeChrono chronoinitialsettings;
+    chronoinitialsettings.start();
+
+    M_heartFctPtr.reset (new HeartFunctors ( dataFile) );
     //! Pointer to access functors
-    M_heart_fct.reset (new HeartFunctors ( dataFile) );
-    ion_model = dataFile ("electric/physics/ion_model", 1);
-    M_heart_fct->M_comm.reset (new Epetra_MpiComm ( MPI_COMM_WORLD ) );
-
-    if (!M_heart_fct->M_comm->MyPID() )
+    M_heartFctPtr->M_comm.reset (new Epetra_MpiComm ( MPI_COMM_WORLD ) );
+    if (!M_heartFctPtr->M_comm->MyPID() )
     {
-        std::cout << "My PID = " << M_heart_fct->M_comm->MyPID() << std::endl;
+        std::cout << "My PID = " << M_heartFctPtr->M_comm->MyPID() << std::endl;
     }
+
+    // check params
+   std::string uOrder =  M_heartFctPtr->M_dataFile ( "electric/space_discretization/u_order", "P1");
+    if ( uOrder.compare ("P1") != 0 ){
+        throw HeartException("Heart exception");
+    }
+    bool verbose = (M_heartFctPtr->M_comm->MyPID() == 0);
+
+
+    //--------------------
+    // Constructions
+    //--------------------
+    //! Boundary conditions handler and function
+    M_bcH.addBC ( "Endo",      ENDOCARDIUM,    Natural,    Full,   M_uZero,  1 );
+    M_bcH.addBC ( "Epi",       EPICARDIUM,     Natural,    Full,   M_uZero,  1 );
+    M_bcH.addBC ( "Trunc",     TRUNC_SEC,      Natural,    Full,   M_uZero,  1 );
+
+    // Setup electric model data
+    M_data.setup(dataFile, M_heartFctPtr);
+
+    //! Local Mesh construction
+    boost::shared_ptr<mesh_Type> localMeshPtr;
+    M_meshData.setup (dataFile, "electric/space_discretization");
+    boost::shared_ptr<mesh_Type > fullMeshPtr ( new mesh_Type ( M_heartFctPtr->M_comm ) );
+    readMesh (*fullMeshPtr, M_meshData);
+    MeshPartitioner< mesh_Type >   meshPart (fullMeshPtr, M_heartFctPtr->M_comm);
+    localMeshPtr = meshPart.meshPartition();
+
+     // Finie element space construction
+    M_uFESpacePtr.reset(new feSpace_Type ( localMeshPtr, feTetraP1, quadRuleTetra15pt, quadRuleTria3pt,1,M_heartFctPtr->M_comm));
+#if BIDOMAIN
+    M_FESpacePtr.reset(new feSpace_Type (localMeshPtr, feTetraP1,quadRuleTetra15pt,quadRuleTria3pt,2,M_heartFctPtr->M_comm));
+#endif
+
+     // Solver construction
+#ifdef MONODOMAIN
+    M_electricSolverPtr.reset( new elecSolver_Type(M_data, *M_uFESpacePtr, M_bcH, M_heartFctPtr->M_comm));
+#elif BIDOMAIN
+    M_electricSolverPtr.reset(new elecSolver_Type(M_data, *M_FESpacePtr, *M_uFESpacePtr, M_bcH, M_heartFctPtr->M_comm));
+#endif
+
+    switch ( dataFile ("electric/physics/ion_model", 1)  ){
+    case 1:
+        M_ionicModelPtr.reset (new RogersMcCulloch< mesh_Type > (M_dataIonic,
+                                                            *localMeshPtr,
+                                                            *M_uFESpacePtr,
+                                                            *M_heartFctPtr->M_comm) );
+        break;
+    case 2:
+        M_ionicModelPtr.reset (new LuoRudy< mesh_Type > (M_dataIonic,
+                                                    *localMeshPtr,
+                                                    *M_uFESpacePtr,
+                                                    *M_heartFctPtr->M_comm) );
+        break;
+    case 3:
+        M_ionicModelPtr.reset (new MitchellSchaeffer< mesh_Type > (M_dataIonic,
+                                                              *localMeshPtr,
+                                                              *M_uFESpacePtr,
+                                                              *M_heartFctPtr->M_comm) );
+        break;
+    default:
+        throw HeartException("electric/physics/ion_model value not supported");
+        break;
+    }
+
+    // Current state buffers construction
+    M_Uptr.reset( new vector_Type (M_electricSolverPtr->solutionTransmembranePotential(), Repeated ));
+#ifdef BIDOMAIN
+    M_Ueptr.reset( new vector_Type (M_electricSolverPtr->solutionExtraPotential(), Repeated ));
+#endif
+    M_Fptr.reset( new vector_Type (M_electricSolverPtr->fiberVector(), Repeated ));
+
+    /*-----------------------*/
+    //  Setup
+    /*-----------------------*/
+
+    M_electricSolverPtr->setup ( M_heartFctPtr->M_dataFile );
+#ifdef MONODOMAIN
+    M_electricSolverPtr->initialize ( M_heartFctPtr->initialScalar() );
+#elif BIDOMAIN
+    M_electricSolverPtr->initialize ( M_heartFctPtr->initialScalar(), M_heartFctPtr->zeroScalar() );
+#endif
+    M_ionicModelPtr->initialize( );
+
+    //! Building time-independent part of the system
+    M_electricSolverPtr->buildSystem( );
+    MPI_Barrier (MPI_COMM_WORLD);
+    M_data.setTime(0);
+    M_electricSolverPtr->resetPreconditioner();
+
+    //! Setting generic Exporter postprocessing
+    if (M_heartFctPtr->M_dataFile ( "exporter/type", "ensight").compare ("hdf5") == 0) {
+        M_exporterPtr.reset ( new ExporterHDF5<mesh_Type > ( M_heartFctPtr->M_dataFile, "heart" ) );
+        M_exporterPtr->setPostDir ( "./" ); // This is a test to see if M_post_dir is working
+        M_exporterPtr->setMeshProcId ( localMeshPtr, M_heartFctPtr->M_comm->MyPID() );
+    }
+    M_exporterPtr->addVariable ( ExporterData<mesh_Type>::ScalarField,  "potential", M_uFESpacePtr,
+                            M_Uptr, UInt (0) );
+#ifdef BIDOMAIN
+    M_exporterPtr->addVariable ( ExporterData<mesh_Type>::ScalarField,  "potential_e", M_FESpacePtr,
+                            M_Ueptr, UInt (0) );
+#endif
+
+    if (M_data.hasFibers() )
+        M_exporterPtr->addVariable ( ExporterData<mesh_Type>::VectorField,
+                                "fibers",
+                                M_uFESpacePtr,
+                                M_Fptr,
+                                UInt (0) );
+    M_exporterPtr->postProcess ( 0 );
+
+    MPI_Barrier (MPI_COMM_WORLD);
+    chronoinitialsettings.stop();
+
+    //cv::namedWindow("Heart", cv::WINDOW_AUTOSIZE);
+
 }
 
+Heart::~Heart(void){
+    //cvDestroyWindow("Heart");
+}
 
 // ===================================================
 //! Methods
 // ===================================================
 
 void
-Heart::run()
+Heart::step()
 {
-    typedef FESpace< mesh_Type, MapEpetra > feSpace_Type;
-    typedef boost::shared_ptr<feSpace_Type> feSpacePtr_Type;
 
-    LifeChrono chronoinitialsettings;
-    LifeChrono chronototaliterations;
-    chronoinitialsettings.start();
+    /*
+    cv::Mat img = cv::imread("lena.png", CV_LOAD_IMAGE_COLOR);
+    cv::imshow("Heart", img);
+    cv::waitKey(3);
+    */
+
+    static const Real dt     = M_data.timeStep();
+    static const Real tFinal = M_data.endTime();
+    static Real time(0.0);
+    static Int iter = 0;
+
+    LifeChrono chrono;
+    vector_Type rhs ( M_electricSolverPtr->getMap() );
     Real normu;
     Real meanu;
     Real minu;
 
-    //! Construction of data classes
-
-#ifdef MONODOMAIN
-    HeartMonodomainData _data (M_heart_fct);
-#else
-    HeartBidomainData _data (M_heart_fct);
-#endif
-    HeartIonicData _dataIonic (M_heart_fct->M_dataFile);
-
-    MeshData meshData;
-    meshData.setup (M_heart_fct->M_dataFile, "electric/space_discretization");
-    boost::shared_ptr<mesh_Type > fullMeshPtr ( new mesh_Type ( M_heart_fct->M_comm ) );
-    readMesh (*fullMeshPtr, meshData);
-    bool verbose = (M_heart_fct->M_comm->MyPID() == 0);
-
-    //! Boundary conditions handler and function
-    BCFunctionBase uZero ( zero_scalar );
-    BCHandler bcH;
-    bcH.addBC ( "Endo",      ENDOCARDIUM,    Natural,    Full,   uZero,  1 );
-    bcH.addBC ( "Epi",       EPICARDIUM,     Natural,    Full,   uZero,  1 );
-    bcH.addBC ( "Trunc",     TRUNC_SEC,      Natural,    Full,   uZero,  1 );
-
-    const ReferenceFE*    refFE_w;
-    const QuadratureRule* qR_w;
-    const QuadratureRule* bdQr_w;
-
-    const ReferenceFE*    refFE_u;
-    const QuadratureRule* qR_u;
-    const QuadratureRule* bdQr_u;
-
-
-    //! Construction of the partitioned mesh
-    boost::shared_ptr<mesh_Type> localMeshPtr;
-    {
-        MeshPartitioner< mesh_Type >   meshPart (fullMeshPtr, M_heart_fct->M_comm);
-        localMeshPtr = meshPart.meshPartition();
+    iter++;
+    time += dt;
+    if( iter == 1){
+        std::cout << " step , time(s), norm u, mean u, max u,  profile(s) " << std::endl;
     }
-    std::string uOrder =  M_heart_fct->M_dataFile ( "electric/space_discretization/u_order", "P1");
-
-    //! Initialization of the FE type and quadrature rules for both the variables
-    if ( uOrder.compare ("P1") == 0 )
-    {
-        if (verbose)
-        {
-            std::cout << "P1 potential " << std::flush;
-        }
-        refFE_u = &feTetraP1;
-        qR_u    = &quadRuleTetra15pt;
-        bdQr_u  = &quadRuleTria3pt;
-    }
-    else
-    {
-        std::cout << "\n " << uOrder << " finite element not implemented yet \n";
-        exit (1);
+    if(time > tFinal + dt / 2. ){
+        throw HeartException("finish");
     }
 
-    std::string wOrder =  M_heart_fct->M_dataFile ( "electric/space_discretization/w_order", "P1");
-    if ( wOrder.compare ("P1") == 0 )
-    {
-        if (verbose)
-        {
-            std::cout << "P1 recovery variable " << std::flush;
-        }
-        refFE_w = &feTetraP1;
-        qR_w    = &quadRuleTetra4pt;
-        bdQr_w  = &quadRuleTria3pt;
-    }
-    else
-    {
-        std::cout << "\n " << wOrder << " finite element not implemented yet \n";
-        exit (1);
-    }
-
-    //! Construction of the FE spaces
-    if (verbose)
-    {
-        std::cout << "Building the potential FE space ... " << std::flush;
-    }
-
-    feSpacePtr_Type uFESpacePtr ( new feSpace_Type ( localMeshPtr,
-                                                     *refFE_u,
-                                                     *qR_u,
-                                                     *bdQr_u,
-                                                     1,
-                                                     M_heart_fct->M_comm) );
-
-#ifdef BIDOMAIN
-    feSpacePtr_Type _FESpacePtr ( new feSpace_Type (localMeshPtr,
-                                                    *refFE_u,
-                                                    *qR_u,
-                                                    *bdQr_u,
-                                                    2,
-                                                    M_heart_fct->M_comm) );
-#endif
-    if (verbose)
-    {
-        std::cout << "ok." << std::endl;
-    }
-    if (verbose)
-    {
-        std::cout << "Building the recovery variable FE space ... " << std::flush;
-    }
-    if (verbose)
-    {
-        std::cout << "ok." << std::endl;
-    }
-
-    UInt totalUDof  = uFESpacePtr->map().map (Unique)->NumGlobalElements();
-    if (verbose)
-    {
-        std::cout << "Total Potential DOF = " << totalUDof << std::endl;
-    }
-    if (verbose)
-    {
-        std::cout << "Calling the electric model constructor ... ";
-    }
-
-#ifdef MONODOMAIN
-    HeartMonodomainSolver< mesh_Type > electricModel (_data, *uFESpacePtr, bcH, M_heart_fct->M_comm);
-#else
-    HeartBidomainSolver< mesh_Type > electricModel (_data, *_FESpacePtr, *uFESpacePtr, bcH, M_heart_fct->M_comm);
-#endif
-
-    if (verbose)
-    {
-        std::cout << "ok." << std::endl;
-    }
-    MapEpetra fullMap (electricModel.getMap() );
-    vector_Type rhs ( fullMap);
-    electricModel.setup ( M_heart_fct->M_dataFile );
-    std::cout << "setup ok" << std::endl;
-
-    if (verbose)
-    {
-        std::cout << "Calling the ionic model constructor ... ";
-    }
-    boost::shared_ptr< HeartIonicSolver< mesh_Type > > ionicModel;
-    if (ion_model == 1)
-    {
-        if (verbose)
-        {
-            std::cout << "Ion Model = Rogers-McCulloch" << std::endl << std::flush;
-        }
-        ionicModel.reset (new RogersMcCulloch< mesh_Type > (_dataIonic,
-                                                            *localMeshPtr,
-                                                            *uFESpacePtr,
-                                                            *M_heart_fct->M_comm) );
-    }
-    else if (ion_model == 2)
-    {
-        if (verbose)
-        {
-            std::cout << "Ion Model = Luo-Rudy" << std::endl << std::flush;
-        }
-        ionicModel.reset (new LuoRudy< mesh_Type > (_dataIonic,
-                                                    *localMeshPtr,
-                                                    *uFESpacePtr,
-                                                    *M_heart_fct->M_comm) );
-    }
-    else if (ion_model == 3)
-    {
-        if (verbose)
-        {
-            std::cout << "Ion Model = Mitchell-Schaeffer" << std::endl << std::flush;
-        }
-        ionicModel.reset (new MitchellSchaeffer< mesh_Type > (_dataIonic,
-                                                              *localMeshPtr,
-                                                              *uFESpacePtr,
-                                                              *M_heart_fct->M_comm) );
-    }
-
-#ifdef MONODOMAIN
-    electricModel.initialize ( M_heart_fct->initialScalar() );
-#else
-    electricModel.initialize ( M_heart_fct->initialScalar(),
-                               M_heart_fct->zeroScalar() );
-#endif
-
-    if (verbose)
-    {
-        std::cout << "ok." << std::endl;
-    }
-
-    ionicModel->initialize( );
-
-    //! Building time-independent part of the system
-    electricModel.buildSystem( );
-    std::cout << "buildsystem ok" << std::endl;
-    //! Initialization
-    Real dt     = _data.timeStep();
-    Real t0     = 0;
-    Real tFinal = _data.endTime();
+    chrono.start();
     MPI_Barrier (MPI_COMM_WORLD);
 
-    if (verbose)
-    {
-        std::cout << "Setting the initial solution ... " << std::endl << std::endl;
-    }
-    _data.setTime (t0);
-    electricModel.resetPreconditioner();
-    if (verbose)
-    {
-        std::cout << " ok " << std::endl;
-    }
+    // solve
+    M_data.setTime (time);
+    M_ionicModelPtr->solveIonicModel ( M_electricSolverPtr->solutionTransmembranePotential(), M_data.timeStep() );
+    rhs *= 0;
+    computeRhs ( rhs );
+    M_electricSolverPtr->updatePDESystem ( rhs );
+    M_electricSolverPtr->PDEiterate ( M_bcH );
 
-    //! Setting generic Exporter postprocessing
-    boost::shared_ptr< Exporter<mesh_Type > > exporter;
-    std::string const exporterType =  M_heart_fct->M_dataFile ( "exporter/type", "ensight");
-#ifdef HAVE_HDF5
-    if (exporterType.compare ("hdf5") == 0)
-    {
-        exporter.reset ( new ExporterHDF5<mesh_Type > ( M_heart_fct->M_dataFile,
-                                                        "heart" ) );
-        exporter->setPostDir ( "./" ); // This is a test to see if M_post_dir is working
-        exporter->setMeshProcId ( localMeshPtr, M_heart_fct->M_comm->MyPID() );
-    }
-    else
-#endif
-    {
-        if (exporterType.compare ("none") == 0)
-        {
-            exporter.reset ( new ExporterEmpty<mesh_Type > ( M_heart_fct->M_dataFile,
-                                                             localMeshPtr,
-                                                             "heart",
-                                                             M_heart_fct->M_comm->MyPID() ) );
-        }
-        else
-        {
-            exporter.reset ( new ExporterEnsight<mesh_Type > ( M_heart_fct->M_dataFile,
-                                                               localMeshPtr,
-                                                               "heart",
-                                                               M_heart_fct->M_comm->MyPID() ) );
-        }
-    }
-
-
-    vectorPtr_Type Uptr ( new vector_Type (electricModel.solutionTransmembranePotential(), Repeated ) );
-
-    exporter->addVariable ( ExporterData<mesh_Type>::ScalarField,  "potential", uFESpacePtr,
-                            Uptr, UInt (0) );
-
+    // export
+    *M_Uptr = M_electricSolverPtr->solutionTransmembranePotential();
 #ifdef BIDOMAIN
-    vectorPtr_Type Ueptr ( new vector_Type (electricModel.solutionExtraPotential(), Repeated ) );
-    exporter->addVariable ( ExporterData<mesh_Type>::ScalarField,  "potential_e", _FESpacePtr,
-                            Ueptr, UInt (0) );
+    *M_Ueptr = M_electricSolverPtr->solutionExtraPotential();
 #endif
+    M_exporterPtr->postProcess ( time );
 
-    vectorPtr_Type Fptr ( new vector_Type (electricModel.fiberVector(), Repeated ) );
-
-    if (_data.hasFibers() )
-        exporter->addVariable ( ExporterData<mesh_Type>::VectorField,
-                                "fibers",
-                                uFESpacePtr,
-                                Fptr,
-                                UInt (0) );
-    exporter->postProcess ( 0 );
+    // analyze
+    normu = M_electricSolverPtr->solutionTransmembranePotential().norm2();
+    M_electricSolverPtr->solutionTransmembranePotential().epetraVector().MeanValue (&meanu);
+    M_electricSolverPtr->solutionTransmembranePotential().epetraVector().MaxValue (&minu);
 
     MPI_Barrier (MPI_COMM_WORLD);
-    chronoinitialsettings.stop();
+    chrono.stop();
 
-    //! Temporal loop
-    LifeChrono chrono;
-    Int iter = 1;
-    chronototaliterations.start();
-    for ( Real time = t0 + dt ; time <= tFinal + dt / 2.; time += dt, iter++)
-    {
-        _data.setTime (time);
-        if (verbose)
-        {
-            std::cout << std::endl;
-            std::cout << "We are now at time " << _data.time() << " s. " << std::endl;
-            std::cout << std::endl;
-        }
-        chrono.start();
-        MPI_Barrier (MPI_COMM_WORLD);
-        ionicModel->solveIonicModel ( electricModel.solutionTransmembranePotential(), _data.timeStep() );
-        rhs *= 0;
-        computeRhs ( rhs, electricModel, ionicModel, _data );
-        electricModel.updatePDESystem ( rhs );
-        electricModel.PDEiterate ( bcH );
-        normu = electricModel.solutionTransmembranePotential().norm2();
-        electricModel.solutionTransmembranePotential().epetraVector().MeanValue (&meanu);
-        electricModel.solutionTransmembranePotential().epetraVector().MaxValue (&minu);
-        if (verbose)
-        {
-            std::cout << "norm u " << normu << std::endl;
-            std::cout << "mean u " << meanu << std::endl;
-            std::cout << "max u " << minu << std::endl << std::flush;
-        }
+    std::cout << iter << ",";
+    std::cout << M_data.time() << ",";
+    std::cout << normu << ",";
+    std::cout << meanu << ",";
+    std::cout << minu << ",";
+    std::cout << chrono.diff();
+    std::cout << std::endl;
 
-        *Uptr = electricModel.solutionTransmembranePotential();
-#ifdef BIDOMAIN
-        *Ueptr = electricModel.solutionExtraPotential();
-#endif
-
-        exporter->postProcess ( time );
-        MPI_Barrier (MPI_COMM_WORLD);
-        chrono.stop();
-        if (verbose)
-        {
-            std::cout << "Total iteration time " << chrono.diff() << " s." << std::endl;
-        }
-        chronototaliterations.stop();
-    }
-
-    if (verbose)
-    {
-        std::cout << "Total iterations time " << chronototaliterations.diff() << " s." << std::endl;
-    }
-    if (verbose)
-    {
-        std::cout << "Total initial settings time " << chronoinitialsettings.diff() << " s." << std::endl;
-    }
-    if (verbose)
-    {
-        std::cout << "Total execution time " << chronoinitialsettings.diff() + chronototaliterations.diff() << " s." << std::endl;
-    }
 }
 
+
 #ifdef MONODOMAIN
-void Heart::computeRhs ( vector_Type& rhs,
-                         HeartMonodomainSolver< mesh_Type >& electricModel,
-                         boost::shared_ptr< HeartIonicSolver< mesh_Type > > ionicModel,
-                         HeartMonodomainData& data )
+void
+Heart::computeRhs ( vector_Type& rhs)
 {
-    bool verbose = (M_heart_fct->M_comm->MyPID() == 0);
+    bool verbose = (M_heartFctPtr->M_comm->MyPID() == 0);
     if (verbose)
     {
         std::cout << "  f-  Computing Rhs ...        " << "\n" << std::flush;
@@ -437,58 +293,58 @@ void Heart::computeRhs ( vector_Type& rhs,
     chrono.start();
 
     //! u, w with repeated map
-    vector_Type uVecRep (electricModel.solutionTransmembranePotential(), Repeated);
-    ionicModel->updateRepeated();
-    VectorElemental elvec_Iapp ( electricModel.potentialFESpace().fe().nbFEDof(), 2 ),
-                    elvec_u ( electricModel.potentialFESpace().fe().nbFEDof(), 1 ),
-                    elvec_Iion ( electricModel.potentialFESpace().fe().nbFEDof(), 1 );
+    vector_Type uVecRep (M_electricSolverPtr->solutionTransmembranePotential(), Repeated);
+    M_ionicModelPtr->updateRepeated();
+    VectorElemental elvec_Iapp ( M_electricSolverPtr->potentialFESpace().fe().nbFEDof(), 2 ),
+                    elvec_u ( M_electricSolverPtr->potentialFESpace().fe().nbFEDof(), 1 ),
+                    elvec_Iion ( M_electricSolverPtr->potentialFESpace().fe().nbFEDof(), 1 );
 
-    for (UInt iVol = 0; iVol < electricModel.potentialFESpace().mesh()->numVolumes(); ++iVol)
+    for (UInt iVol = 0; iVol < M_electricSolverPtr->potentialFESpace().mesh()->numVolumes(); ++iVol)
     {
-        electricModel.potentialFESpace().fe().updateJacQuadPt ( electricModel.potentialFESpace().mesh()->volumeList ( iVol ) );
+        M_electricSolverPtr->potentialFESpace().fe().updateJacQuadPt ( M_electricSolverPtr->potentialFESpace().mesh()->volumeList ( iVol ) );
         elvec_Iapp.zero();
         elvec_u.zero();
         elvec_Iion.zero();
 
-        UInt eleIDu = electricModel.potentialFESpace().fe().currentLocalId();
-        UInt nbNode = ( UInt ) electricModel.potentialFESpace().fe().nbFEDof();
+        UInt eleIDu = M_electricSolverPtr->potentialFESpace().fe().currentLocalId();
+        UInt nbNode = ( UInt ) M_electricSolverPtr->potentialFESpace().fe().nbFEDof();
 
         //! Filling local elvec_u with potential values in the nodes
         for ( UInt iNode = 0 ; iNode < nbNode ; iNode++ )
         {
-            Int  ig = electricModel.potentialFESpace().dof().localToGlobalMap ( eleIDu, iNode );
+            Int  ig = M_electricSolverPtr->potentialFESpace().dof().localToGlobalMap ( eleIDu, iNode );
             elvec_u.vec() [ iNode ] = uVecRep[ig];
         }
 
-        ionicModel->updateElementSolution (eleIDu);
-        ionicModel->computeIonicCurrent (data.membraneCapacitance(), elvec_Iion, elvec_u, electricModel.potentialFESpace() );
+        M_ionicModelPtr->updateElementSolution (eleIDu);
+        M_ionicModelPtr->computeIonicCurrent (M_data.membraneCapacitance(), elvec_Iion, elvec_u, M_electricSolverPtr->potentialFESpace() );
 
         //! Computing the current source of the righthand side, repeated
-        AssemblyElemental::source (M_heart_fct->stimulus(),
+        AssemblyElemental::source (M_heartFctPtr->stimulus(),
                                    elvec_Iapp,
-                                   electricModel.potentialFESpace().fe(),
-                                   data.time(),
+                                   M_electricSolverPtr->potentialFESpace().fe(),
+                                   M_data.time(),
                                    0);
-        AssemblyElemental::source (M_heart_fct->stimulus(),
+        AssemblyElemental::source (M_heartFctPtr->stimulus(),
                                    elvec_Iapp,
-                                   electricModel.potentialFESpace().fe(),
-                                   data.time(),
+                                   M_electricSolverPtr->potentialFESpace().fe(),
+                                   M_data.time(),
                                    1);
 
         //! Assembling the righthand side
-        for ( UInt i = 0 ; i < electricModel.potentialFESpace().fe().nbFEDof() ; i++ )
+        for ( UInt i = 0 ; i < M_electricSolverPtr->potentialFESpace().fe().nbFEDof() ; i++ )
         {
-            Int  ig = electricModel.potentialFESpace().dof().localToGlobalMap ( eleIDu, i );
-            rhs.sumIntoGlobalValues (ig, (data.conductivityRatio() * elvec_Iapp.vec() [i] +
+            Int  ig = M_electricSolverPtr->potentialFESpace().dof().localToGlobalMap ( eleIDu, i );
+            rhs.sumIntoGlobalValues (ig, (M_data.conductivityRatio() * elvec_Iapp.vec() [i] +
                                           elvec_Iapp.vec() [i + nbNode]) /
-                                     (1 + data.conductivityRatio() ) + data.volumeSurfaceRatio() * elvec_Iion.vec() [i] );
+                                     (1 + M_data.conductivityRatio() ) + M_data.volumeSurfaceRatio() * elvec_Iion.vec() [i] );
         }
     }
     rhs.globalAssemble();
-    Real coeff = data.volumeSurfaceRatio() * data.membraneCapacitance() / data.timeStep();
-    vector_Type tmpvec (electricModel.solutionTransmembranePotential() );
+    Real coeff = M_data.volumeSurfaceRatio() * M_data.membraneCapacitance() / M_data.timeStep();
+    vector_Type tmpvec (M_electricSolverPtr->solutionTransmembranePotential() );
     tmpvec *= coeff;
-    rhs += electricModel.massMatrix() * tmpvec;
+    rhs += M_electricSolverPtr->massMatrix() * tmpvec;
     MPI_Barrier (MPI_COMM_WORLD);
     chrono.stop();
     if (verbose)
@@ -497,12 +353,10 @@ void Heart::computeRhs ( vector_Type& rhs,
     }
 }
 #else
-void Heart::computeRhs ( vector_Type& rhs,
-                         HeartBidomainSolver< mesh_Type >& electricModel,
-                         boost::shared_ptr< HeartIonicSolver< mesh_Type > > ionicModel,
-                         HeartBidomainData& data )
+void
+Heart::computeRhs ( vector_Type& rhs )
 {
-    bool verbose = (M_heart_fct->M_comm->MyPID() == 0);
+    bool verbose = (M_heartFctPtr->M_comm->MyPID() == 0);
     if (verbose)
     {
         std::cout << "  f-  Computing Rhs ...        " << "\n" << std::flush;
@@ -511,57 +365,57 @@ void Heart::computeRhs ( vector_Type& rhs,
     chrono.start();
 
     //! u, w with repeated map
-    vector_Type uVecRep (electricModel.solutionTransmembranePotential(), Repeated);
-    ionicModel->updateRepeated();
+    vector_Type uVecRep (M_electricSolverPtr->solutionTransmembranePotential(), Repeated);
+    M_ionicModelPtr->updateRepeated();
 
-    VectorElemental elvec_Iapp ( electricModel.potentialFESpace().fe().nbFEDof(), 2 ),
-                    elvec_u ( electricModel.potentialFESpace().fe().nbFEDof(), 1 ),
-                    elvec_Iion ( electricModel.potentialFESpace().fe().nbFEDof(), 1 );
-    for (UInt iVol = 0; iVol < electricModel.potentialFESpace().mesh()->numVolumes(); ++iVol)
+    VectorElemental elvec_Iapp ( M_electricSolverPtr->potentialFESpace().fe().nbFEDof(), 2 ),
+                    elvec_u ( M_electricSolverPtr->potentialFESpace().fe().nbFEDof(), 1 ),
+                    elvec_Iion ( M_electricSolverPtr->potentialFESpace().fe().nbFEDof(), 1 );
+    for (UInt iVol = 0; iVol < M_electricSolverPtr->potentialFESpace().mesh()->numVolumes(); ++iVol)
     {
-        electricModel.potentialFESpace().fe().updateJacQuadPt ( electricModel.potentialFESpace().mesh()->volumeList ( iVol ) );
+        M_electricSolverPtr->potentialFESpace().fe().updateJacQuadPt ( M_electricSolverPtr->potentialFESpace().mesh()->volumeList ( iVol ) );
         elvec_u.zero();
         elvec_Iion.zero();
         elvec_Iapp.zero();
 
-        UInt eleIDu = electricModel.potentialFESpace().fe().currentLocalId();
-        UInt nbNode = ( UInt ) electricModel.potentialFESpace().fe().nbFEDof();
+        UInt eleIDu = M_electricSolverPtr->potentialFESpace().fe().currentLocalId();
+        UInt nbNode = ( UInt ) M_electricSolverPtr->potentialFESpace().fe().nbFEDof();
         for ( UInt iNode = 0 ; iNode < nbNode ; iNode++ )
         {
-            Int ig = electricModel.potentialFESpace().dof().localToGlobalMap ( eleIDu, iNode );
+            Int ig = M_electricSolverPtr->potentialFESpace().dof().localToGlobalMap ( eleIDu, iNode );
             elvec_u.vec() [ iNode ] = uVecRep[ig];
         }
 
-        UInt eleID = electricModel.potentialFESpace().fe().currentLocalId();
-        ionicModel->updateElementSolution (eleID);
-        ionicModel->computeIonicCurrent (data.membraneCapacitance(), elvec_Iion, elvec_u, electricModel.potentialFESpace() );
+        UInt eleID = M_electricSolverPtr->potentialFESpace().fe().currentLocalId();
+        M_ionicModelPtr->updateElementSolution (eleID);
+        M_ionicModelPtr->computeIonicCurrent (M_data.membraneCapacitance(), elvec_Iion, elvec_u, M_electricSolverPtr->potentialFESpace() );
 
         //! Computing Iapp
-        AssemblyElemental::source (M_heart_fct->stimulus(),
+        AssemblyElemental::source (M_heartFctPtr->stimulus(),
                                    elvec_Iapp,
-                                   electricModel.potentialFESpace().fe(),
-                                   data.time(), 0);
-        AssemblyElemental::source (M_heart_fct->stimulus(),
+                                   M_electricSolverPtr->potentialFESpace().fe(),
+                                   M_data.time(), 0);
+        AssemblyElemental::source (M_heartFctPtr->stimulus(),
                                    elvec_Iapp,
-                                   electricModel.potentialFESpace().fe(),
-                                   data.time(),
+                                   M_electricSolverPtr->potentialFESpace().fe(),
+                                   M_data.time(),
                                    1);
-        UInt totalUDof  = electricModel.potentialFESpace().map().map (Unique)->NumGlobalElements();
+        UInt totalUDof  = M_electricSolverPtr->potentialFESpace().map().map (Unique)->NumGlobalElements();
 
         for ( UInt iNode = 0 ; iNode < nbNode ; iNode++ )
         {
-            Int ig = electricModel.potentialFESpace().dof().localToGlobalMap ( eleIDu, iNode );
+            Int ig = M_electricSolverPtr->potentialFESpace().dof().localToGlobalMap ( eleIDu, iNode );
             rhs.sumIntoGlobalValues (ig, elvec_Iapp.vec() [iNode] +
-                                     data.volumeSurfaceRatio() * elvec_Iion.vec() [iNode] );
+                                     M_data.volumeSurfaceRatio() * elvec_Iion.vec() [iNode] );
             rhs.sumIntoGlobalValues (ig + totalUDof,
                                      -elvec_Iapp.vec() [iNode + nbNode] -
-                                     data.volumeSurfaceRatio() * elvec_Iion.vec() [iNode] );
+                                     M_data.volumeSurfaceRatio() * elvec_Iion.vec() [iNode] );
         }
     }
     rhs.globalAssemble();
 
-    rhs += electricModel.matrMass() * data.volumeSurfaceRatio() *
-           data.membraneCapacitance() * electricModel.BDFIntraExtraPotential().time_der (data.timeStep() );
+    rhs += M_electricSolverPtr->matrMass() * M_data.volumeSurfaceRatio() *
+           M_data.membraneCapacitance() * M_electricSolverPtr->BDFIntraExtraPotential().time_der (M_data.timeStep() );
 
     MPI_Barrier (MPI_COMM_WORLD);
 

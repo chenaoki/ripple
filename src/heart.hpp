@@ -53,7 +53,7 @@
 #include <lifev/core/filter/ExporterHDF5.hpp>
 #include <lifev/core/filter/ExporterEmpty.hpp>
 
-
+#include <stdexcept>
 
 namespace LifeV
 {
@@ -64,61 +64,76 @@ namespace LifeV
 
 
  */
+
+class HeartException : public std::domain_error {
+public:
+    HeartException(const std::string& cause) :
+    std::domain_error("Heart : " + cause){}
+};
+
 class Heart
 {
 public:
 
-    //! @name Typedefs
-    //@{
-
+    typedef RegionMesh<LinearTetra>                                mesh_Type;
+    typedef HeartIonicSolver< mesh_Type >                       ionicSolver_Type;
+    typedef FESpace< mesh_Type, MapEpetra >               feSpace_Type;
 #ifdef MONODOMAIN
-    typedef HeartMonodomainSolver< RegionMesh<LinearTetra> >::vector_Type   vector_Type;
-    typedef HeartMonodomainSolver<RegionMesh<LinearTetra> >::matrix_Type        matrix_Type;
-#else
-    typedef HeartBidomainSolver< RegionMesh<LinearTetra> >::vector_Type     vector_Type;
-    typedef HeartBidomainSolver<RegionMesh<LinearTetra> >::matrix_Type      matrix_Type;
+    typedef HeartMonodomainData                                      elecData_Type;
+    typedef HeartMonodomainSolver< mesh_Type >       elecSolver_Type;
+#elif BIDOMAIN
+    typedef HeartBidomainData                                             elecData_Type;
+    typedef HeartBidomainSolver< mesh_Type >              elecSolver_Type;
 #endif
-    typedef boost::shared_ptr<vector_Type>                  vectorPtr_Type;
-    typedef boost::shared_ptr<matrix_Type>                  matrixPtr_Type;
-    //@}
+    typedef elecSolver_Type::vector_Type                          vector_Type;
+    typedef elecSolver_Type::matrix_Type                          matrix_Type;
 
-    /** @name Constructors, destructor
-     */
-    //@{
-
-    Heart ( Int argc,
-            char** argv );
-
-    virtual ~Heart() {}
-
-    //@}
-
-    /** @name  Methods
-     */
-    //@{
-
-    //! To build the system and iterate
-    void run();
-
-    //! To compute the righthand side of the system
-#ifdef MONODOMAIN
-    void computeRhs ( vector_Type& rhs,
-                      HeartMonodomainSolver< RegionMesh<LinearTetra> >& electricModel,
-                      boost::shared_ptr< HeartIonicSolver< RegionMesh<LinearTetra> > > ionicModel,
-                      HeartMonodomainData& dataMonodomain );
-#else
-    void computeRhs ( vector_Type& rhs,
-                      HeartBidomainSolver< RegionMesh<LinearTetra> >& electricModel,
-                      boost::shared_ptr< HeartIonicSolver< RegionMesh<LinearTetra> > > ionicModel,
-                      HeartBidomainData& dataBidomain );
-#endif
-    //@}
-
+    // pointer types
+    typedef boost::shared_ptr< elecSolver_Type >          elecSolverPtr_Type;
+    typedef boost::shared_ptr< vector_Type >                  vectorPtr_Type;
+    typedef boost::shared_ptr< matrix_Type >                  matrixPtr_Type;
+    typedef boost::shared_ptr< feSpace_Type >              feSpacePtr_Type;
+    typedef boost::shared_ptr< ionicSolver_Type >         ionicSolverPtr_Type;
 
 private:
-    UInt ion_model;
-    UInt nbeq;
-    boost::shared_ptr<HeartFunctors> M_heart_fct;
+
+    /*Object members*/
+    elecData_Type M_data;
+    HeartIonicData M_dataIonic;
+    MeshData M_meshData;
+    BCFunctionBase M_uZero;
+    BCHandler M_bcH;
+
+    /*Pointer members*/
+    boost::shared_ptr< HeartFunctors > M_heartFctPtr;
+    boost::shared_ptr< Exporter<mesh_Type > > M_exporterPtr;
+    elecSolverPtr_Type M_electricSolverPtr;
+    ionicSolverPtr_Type M_ionicModelPtr;
+    feSpacePtr_Type M_uFESpacePtr;
+#if BIDOMAIN
+    feSpacePtr_Type M_FESpacePtr;
+#endif
+
+    /* current buffers */
+    vectorPtr_Type M_Uptr;
+    vectorPtr_Type M_Ueptr;
+    vectorPtr_Type M_Fptr;
+
+public:
+    Heart ( GetPot& dataFile );
+    virtual ~Heart();
+    void step();
+    void computeRhs ( vector_Type& rhs );
+
+private:
+    static Real zero_scalar_function ( const Real& /* t */,
+                     const Real& /* x */,
+                     const Real& /* y */,
+                     const Real& /* z */,
+                     const ID& /* i */ ){ return 0.; };
+
+
 };
+
 }
 #endif /* __HEART_H */

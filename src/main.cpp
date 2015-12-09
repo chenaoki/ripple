@@ -49,20 +49,15 @@
 #include <lifev/core/LifeV.hpp>
 #include <lifev/core/algorithm/PreconditionerIfpack.hpp>
 #include <lifev/core/algorithm/PreconditionerML.hpp>
+#include <lifev/core/filter/GetPot.hpp>
 #include "heart.hpp"
 
-#include <opencv/cv.hpp>
-#include <opencv/highgui.h>
+#include <stdio.h>
 
 using namespace LifeV;
 
 Int main ( Int argc, char** argv )
 {
-
-    cv::Mat img = cv::imread("lena.png", CV_LOAD_IMAGE_COLOR);
-    cv::namedWindow("ripple", cv::WINDOW_AUTOSIZE);
-    cv::imshow("ripple", img);
-    cv::waitKey(-1);
 
     //! Initializing Epetra communicator
     MPI_Init (&argc, &argv);
@@ -71,8 +66,18 @@ Int main ( Int argc, char** argv )
     {
         std::cout << "% using MPI" << std::endl;
     }
-    Heart heart ( argc, argv );
-    heart.run();
+
+
+    GetPot command_line (argc, argv);
+    const std::string data_file_name = command_line.follow ("data", 2, "-f", "--file");
+    GetPot dataFile (data_file_name);
+
+    try{
+        Heart heart ( dataFile);
+        while(true) heart.step();
+    } catch(HeartException& e){
+        std::cerr << e.what() << std::endl;
+    }
 
     //! Finalizing Epetra communicator
     MPI_Finalize();
