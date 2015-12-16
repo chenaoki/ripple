@@ -102,13 +102,13 @@ sphere_radius   = 0.5
 
 [../time_discretization]
 initialtime     = 0.
-endtime         = 1000
+endtime         = 200
 timestep        = 1
 BDF_order       = 1
 
 [../space_discretization]
 mesh_dir        = ./meshes/
-mesh_file       = 128x128.mesh #ellipsoid5272.mesh
+mesh_file       = lid16.mesh  #128x128.mesh #ellipsoid5272.mesh
 mesh_type       = .mesh
 has_fibers = 0
 fibers_dir = ./Mesh/

@@ -50,7 +50,7 @@
 #include <lifev/core/algorithm/PreconditionerIfpack.hpp>
 #include <lifev/core/algorithm/PreconditionerML.hpp>
 #include <lifev/core/filter/GetPot.hpp>
-#include "heart.hpp"
+#include "Heart.hpp"
 
 #include <stdio.h>
 
