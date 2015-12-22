@@ -1,0 +1,32 @@
+include ./Makefile.common
+
+OBJS:= \
+	Heart.o \
+	HeartDiffusionFunctor.o \
+	HeartDiffusionModel.o \
+	HeartIonicData.o \
+	RippleEnvironment.o
+
+EXE=RippleEnvironment
+
+all:$(EXE)
+
+$(EXE): $(OBJS)
+	$(CC) $(LFLAGS) $(OBJS) -o $(EXE) $(LIBS) -lrlutils -lrlenvironment -lrlgluenetdev 
+
+%.o : ../src/%.cpp
+	$(CC) $(CFLAGS) -Wall -pedantic $(VERSION) -c $< -o $@
+
+clean:
+	rm *.o $(EXE)
+
+
+
+
+
+
+
+
+
+
+

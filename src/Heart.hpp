@@ -101,6 +101,8 @@ private:
     boost::shared_ptr< elecSolver_Type >             M_elecSolverPtr;
     boost::shared_ptr< ionicSolver_Type >            M_ionicSolverPtr;
     boost::shared_ptr< feSpace_Type >                 M_uFESpacePtr;
+
+public:
     boost::shared_ptr< vector_Type >                 M_Uptr;
     boost::shared_ptr< vector_Type >                 M_Fptr;
     boost::shared_ptr< Exporter<mesh_Type > >  M_exporterPtr;

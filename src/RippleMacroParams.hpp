@@ -1,0 +1,6 @@
+#ifndef __RIPPLEMACROPARAMS__
+#define __RIPPLEMACROPARAMS__
+
+#define SIZE_OBS 578
+
+#endif// __RIPPLEMACROPARAMS__

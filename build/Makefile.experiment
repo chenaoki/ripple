@@ -1,0 +1,18 @@
+include ./Makefile.common
+
+OBJS:= \
+	RippleExperiment.o
+
+EXE=RippleExperiment
+
+all:$(EXE)
+
+$(EXE): $(OBJS)
+	$(CC) $(LFLAGS) $(OBJS) -o $(EXE) $(LIBS) -lrlutils -lrlexperiment -lrlgluenetdev 
+
+%.o : ../src/%.cpp
+	$(CC) $(CFLAGS) -Wall -pedantic $(VERSION) -c $< -o $@
+
+clean:
+	rm *.o $(EXE)
+

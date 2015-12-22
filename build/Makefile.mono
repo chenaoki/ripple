@@ -1,0 +1,21 @@
+include ./Makefile.common
+
+OBJS:=main.o \
+	Heart.o \
+	HeartDiffusionFunctor.o \
+	HeartDiffusionModel.o \
+	HeartIonicData.o
+
+EXE=ripple
+
+all:$(EXE)
+
+$(EXE): $(OBJS)
+	$(CC) $(LFLAGS) $(OBJS) -o $(EXE) $(LIBS)
+
+%.o : ../src/%.cpp
+	$(CC) $(CFLAGS) $(VERSION) -c $< -o $@
+
+clean:
+	rm *.o $(EXE)
+

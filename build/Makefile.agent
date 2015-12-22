@@ -1,0 +1,18 @@
+include ./Makefile.common
+
+OBJS:= \
+	RippleAgent.o
+
+EXE=RippleAgent
+
+all:$(EXE)
+
+$(EXE): $(OBJS)
+	$(CC) $(LFLAGS) $(OBJS) -o $(EXE) $(LIBS) -lrlutils -lrlagent -lrlgluenetdev 
+
+%.o : ../src/%.cpp
+	$(CC) $(CFLAGS) -Wall -pedantic $(VERSION) -c $< -o $@
+
+clean:
+	rm *.o $(EXE)
+
