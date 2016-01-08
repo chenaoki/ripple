@@ -75,20 +75,6 @@ heart_diff_fct = 0
 # case 2: reduced diffusion in cyl region
 # case 3: reduced diffusion in box region
 
-stim_count_1    = 1
-stim_center_1   = '0 0 0'
-stim_radius_1   = 0.5
-stim_start_1    = 100
-stim_stop_1     = 105
-stim_value_1    = 20.0
-stim_period_1   = 800
-
-stim_radius_2   = 0.5
-stim_start_2    = 0
-stim_stop_2     = 10
-stim_value_2    = 25.0
-stim_period_2   = 450
-
 #per reduced_sigma_sphere (heart_diff_fct=1)
 sigma_reduction = '0.1, 1.'
 sphere_center   = '0., 0., 0.'
@@ -198,3 +184,34 @@ overlap         = 1
 droptol         = 1.e-7 #1.e-5
 fill            = 2 #1
 prectype        = Ifpack
+
+[stim]
+
+mode            = S1S2
+
+[./S1S2]
+
+S1_count        = 1 
+S1_start        = 100
+S1_duration     = 5
+S1_interval     = 400
+S1_distance     = 0.5
+S1_current      = 20.0
+S2_start        = 450
+S2_duration     = 10
+S2_distance     = 0.5
+S2_current      = 25.0
+
+#stim_count_1    = 1
+#stim_center_1   = '0 0 0'
+#stim_radius_1   = 0.5
+#stim_start_1    = 100
+#stim_stop_1     = 105
+#stim_value_1    = 20.0
+#stim_period_1   = 800
+#stim_radius_2   = 0.5
+#stim_start_2    = 0
+#stim_stop_2     = 10
+#stim_value_2    = 25.0
+#stim_period_2   = 450
+

@@ -10,3 +10,10 @@ clean:
 	make -f Makefile.experiment clean
 	make -f Makefile.agent clean
 
+runMono:
+	./ripple
+
+runRL:
+	rl_glue&
+	./RippleEnvironment&
+	./RippleExperiment&

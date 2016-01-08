@@ -19,11 +19,14 @@
 #ifndef _HEARTDIFFUSIONFUNCTOR_H_
 #define _HEARTDIFFUSIONFUNCTOR_H_
 #include <string>
+#include <vector>
 #include <boost/shared_ptr.hpp>
 #include <boost/bind.hpp>
 #include <boost/function.hpp>
 #include <lifev/core/filter/GetPot.hpp>
 #include <lifev/core/fem/FESpace.hpp>
+#include "StimElectrode.hpp"
+
 namespace LifeV
 {
 
@@ -31,10 +34,14 @@ class HeartDiffusionFunctor
 {
 public:
     typedef boost::function<Real ( Real const& x, Real const& y, Real const& z, Real const&, ID const& id) > funcType;
+    typedef std::shared_ptr<ripple::StimElectrode<Real, Real>> elecPtrType;
+    typedef ripple::AxisStimElectrode<Real, Real> axisElecType;
+    typedef std::shared_ptr<axisElecType> axisElecPtrType;
 private:
     GetPot& M_dataFile;
     std::string M_stimulusMode;
     Real M_restPotential;
+    std::vector<elecPtrType> vecPtrStimElectrode;
 private:
     HeartDiffusionFunctor ( const HeartDiffusionFunctor& heartFunctors );
     HeartDiffusionFunctor& operator= ( const HeartDiffusionFunctor& heartFunctors );

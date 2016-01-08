@@ -1,33 +1,8 @@
-//@HEADER
-/*
-*******************************************************************************
-
-    Copyright (C) 2004, 2005, 2007 EPFL, Politecnico di Milano, INRIA
-    Copyright (C) 2010 EPFL, Politecnico di Milano, Emory University
-
-    This file is part of LifeV.
-
-    LifeV is free software; you can redistribute it and/or modify
-    it under the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    LifeV is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with LifeV.  If not, see <http://www.gnu.org/licenses/>.
-
-*******************************************************************************
-*/
-//@HEADER
-
 #include "HeartDiffusionFunctor.hpp"
 #include <boost/shared_ptr.hpp>
 
 using namespace LifeV;
+using namespace ripple;
 // ===================================================
 // Set Methods
 // ===================================================
@@ -40,17 +15,58 @@ HeartDiffusionFunctor::HeartDiffusionFunctor(  ):
 
 HeartDiffusionFunctor::HeartDiffusionFunctor ( GetPot& dataFile ):
     M_dataFile(dataFile),
-    M_stimulusMode("S1S2"),
+    M_stimulusMode(dataFile("stim/mode", "S1S2")),
     M_restPotential(dataFile ("electric/physics/u0", -84.))
 {
-    M_stimulusMode = M_dataFile("", "S1S2");
+    if(M_stimulusMode == "S1S2"){
+
+      Int S1_count(dataFile("S1_count", 1));
+      Real S1_start(dataFile("S1_start", 100));
+      Real S1_duration(dataFile("S1_duration", 5));
+      Real S1_interval(dataFile("S1_interval", 400));
+      Real S1_distance(dataFile("S1_distance", 0.5));
+      Real S1_current(dataFile("S1_current", 20.0));
+      Real S2_start(dataFile("S2_start", 100));
+      Real S2_duration(dataFile("S2_duration", 5));
+      Real S2_distance(dataFile("S2_distance", 0.5));
+      Real S2_current(dataFile("S2_current", 25.0));
+
+      axisElecPtrType S1(new axisElecType());
+      axisElecPtrType S2(new axisElecType());
+/*
+      S1->addAxis(0, Real(0.0), S1_distance);
+      S2->addAxis(1, Real(0.0), S2_distance);
+      for(Int i = 0; i < S1_count; i++){
+        for(Real t = 0; t < S1_duration; t += 1.0 ){
+          S1->setCurrent(
+              static_cast<unsigned int>( t + S1_start + i * S1_interval),
+              S1_current
+          );
+        }
+      }
+      for(Real t = 0; t < S2_duration; t += 1.0 ){
+        S2->setCurrent(
+            static_cast<unsigned int>( t + S2_start ),
+            S2_current
+        );
+      }
+      this->vecPtrStimElectrode.push_back(static_cast<elecPtrType>(S1));
+      this->vecPtrStimElectrode.push_back(static_cast<elecPtrType>(S2));
+*/
+    } // S1S2 setting
 }
 
 Real
 HeartDiffusionFunctor::setStimulus ( const Real& t, const Real& x, const Real& y, const Real& z, const ID&   id) const
 {
     Real ret = 0.;
-    if(M_stimulusMode.compare("file")){}
+    /*
+    for( std::vector<elecPtrType>::const_iterator it = this->vecPtrStimElectrode.begin();
+        it != vecPtrStimElectrode.end(); it++)
+    {
+      //ret += (*it)->getCurrent(static_cast<unsigned int>(t), x, y, z);
+    }
+    */
     return ret;
 }
 
