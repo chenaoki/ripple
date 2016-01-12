@@ -88,7 +88,7 @@ sphere_radius   = 0.5
 
 [../time_discretization]
 initialtime     = 0.
-endtime         = 200
+endtime         = 2000
 timestep        = 1
 BDF_order       = 1
 
@@ -195,11 +195,11 @@ S1_count        = 1
 S1_start        = 100
 S1_duration     = 5
 S1_interval     = 400
-S1_distance     = 0.5
-S1_current      = 20.0
-S2_start        = 450
+S1_distance     = 0.1
+S1_current      = 200
+S2_start        = 330
 S2_duration     = 10
-S2_distance     = 0.5
+S2_distance     = 0.3
 S2_current      = 25.0
 
 #stim_count_1    = 1
