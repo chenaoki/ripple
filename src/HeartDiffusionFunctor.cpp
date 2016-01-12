@@ -20,20 +20,20 @@ HeartDiffusionFunctor::HeartDiffusionFunctor ( GetPot& dataFile ):
 {
     if(M_stimulusMode == "S1S2"){
 
-      Int S1_count(dataFile("S1_count", 1));
-      Real S1_start(dataFile("S1_start", 100));
-      Real S1_duration(dataFile("S1_duration", 5));
-      Real S1_interval(dataFile("S1_interval", 400));
-      Real S1_distance(dataFile("S1_distance", 0.5));
-      Real S1_current(dataFile("S1_current", 20.0));
-      Real S2_start(dataFile("S2_start", 100));
-      Real S2_duration(dataFile("S2_duration", 5));
-      Real S2_distance(dataFile("S2_distance", 0.5));
-      Real S2_current(dataFile("S2_current", 25.0));
+      Int S1_count(dataFile("stim/S1S2/S1_count", 1));
+      Real S1_start(dataFile("stim/S1S2/S1_start", 100));
+      Real S1_duration(dataFile("stim/S1S2/S1_duration", 5));
+      Real S1_interval(dataFile("stim/S1S2/S1_interval", 400));
+      Real S1_distance(dataFile("stim/S1S2/S1_distance", 0.5));
+      Real S1_current(dataFile("Sstim/S1S2/1_current", 20.0));
+      Real S2_start(dataFile("stim/S1S2/S2_start", 100));
+      Real S2_duration(dataFile("stim/S1S2/S2_duration", 5));
+      Real S2_distance(dataFile("stim/S1S2/S2_distance", 0.5));
+      Real S2_current(dataFile("stim/S1S2/S2_current", 25.0));
 
       axisElecPtrType S1(new axisElecType());
       axisElecPtrType S2(new axisElecType());
-/*
+
       S1->addAxis(0, Real(0.0), S1_distance);
       S2->addAxis(1, Real(0.0), S2_distance);
       for(Int i = 0; i < S1_count; i++){
@@ -50,9 +50,9 @@ HeartDiffusionFunctor::HeartDiffusionFunctor ( GetPot& dataFile ):
             S2_current
         );
       }
+
       this->vecPtrStimElectrode.push_back(static_cast<elecPtrType>(S1));
       this->vecPtrStimElectrode.push_back(static_cast<elecPtrType>(S2));
-*/
     } // S1S2 setting
 }
 
@@ -60,13 +60,11 @@ Real
 HeartDiffusionFunctor::setStimulus ( const Real& t, const Real& x, const Real& y, const Real& z, const ID&   id) const
 {
     Real ret = 0.;
-    /*
     for( std::vector<elecPtrType>::const_iterator it = this->vecPtrStimElectrode.begin();
         it != vecPtrStimElectrode.end(); it++)
     {
-      //ret += (*it)->getCurrent(static_cast<unsigned int>(t), x, y, z);
+      ret += (*it)->getCurrent(static_cast<unsigned int>(t), x, y, z);
     }
-    */
     return ret;
 }
 
