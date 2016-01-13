@@ -88,7 +88,7 @@ sphere_radius   = 0.5
 
 [../time_discretization]
 initialtime     = 0.
-endtime         = 2000
+endtime         = 1000
 timestep        = 1
 BDF_order       = 1
 
@@ -202,16 +202,10 @@ S2_duration     = 10
 S2_distance     = 0.3
 S2_current      = 25.0
 
-#stim_count_1    = 1
-#stim_center_1   = '0 0 0'
-#stim_radius_1   = 0.5
-#stim_start_1    = 100
-#stim_stop_1     = 105
-#stim_value_1    = 20.0
-#stim_period_1   = 800
-#stim_radius_2   = 0.5
-#stim_start_2    = 0
-#stim_stop_2     = 10
-#stim_value_2    = 25.0
-#stim_period_2   = 450
+[../array]
+numX            = 3
+numY            = 3
+offset          = 0.25
+interval        = 0.25
+size            = 0.1
 

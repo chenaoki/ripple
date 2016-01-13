@@ -62,14 +62,16 @@ class AxisStimElectrode : public StimElectrode<Pos, Cur>
    };
 
    Cur getCurrent(unsigned int time, Pos x, Pos y, Pos z){
-     bool flag = false;
+     bool flag = true;
      Pos dist = 0;
      for(typename std::vector<Axis>::const_iterator it = vecAxis.begin(); it != vecAxis.end(); it++){
-       if(it->numAxis == 0 && abs(it->p - x) < it->distance ) flag = true;
-       if(it->numAxis == 1 && abs(it->p - y) < it->distance ) flag = true;
-       if(it->numAxis == 2 && abs(it->p - z) < it->distance ) flag = true;
+       if(it->numAxis == 0 && abs(it->p - x) >= it->distance ) flag = false;
+       if(it->numAxis == 1 && abs(it->p - y) >= it->distance ) flag = false;
+       if(it->numAxis == 2 && abs(it->p - z) >= it->distance ) flag = false;
      }
-     if( !flag || this->mapTimeCurrent.find(time) == this->mapTimeCurrent.end()){
+     if( vecAxis.size() == 0 || !flag || 
+         this->mapTimeCurrent.find(time) == this->mapTimeCurrent.end())
+     {
        return 0;
      }else{
        return this->mapTimeCurrent[time];

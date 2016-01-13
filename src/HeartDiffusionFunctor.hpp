@@ -40,6 +40,7 @@ public:
 private:
     GetPot& M_dataFile;
     std::string M_stimulusMode;
+    Real M_stimCurrent;
     Real M_restPotential;
     std::vector<elecPtrType> vecPtrStimElectrode;
 private:
@@ -52,6 +53,8 @@ public:
     HeartDiffusionFunctor();
     HeartDiffusionFunctor ( GetPot& dataFile );
     virtual ~HeartDiffusionFunctor(){};
+    void stimulate(unsigned int time, unsigned int idElectrode);
+    void setStimulate(unsigned int idElectrode);
     funcType stimulus();
     funcType initialScalar();
     funcType zeroScalar();

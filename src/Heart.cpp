@@ -197,6 +197,15 @@ Heart::~Heart(void){
 //! Methods
 // ===================================================
 
+void 
+Heart::stimulate(unsigned int idElectrode)
+{
+  this->M_elecFctrPtr->stimulate(
+    static_cast<unsigned int>(M_elecModel.time())+1,
+    idElectrode
+  );
+}
+
 void
 Heart::step()
 {

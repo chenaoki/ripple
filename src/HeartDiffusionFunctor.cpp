@@ -10,14 +10,32 @@ using namespace ripple;
 HeartDiffusionFunctor::HeartDiffusionFunctor(  ):
     M_dataFile(*(boost::shared_ptr<GetPot>( new GetPot() ) ) ),
     M_stimulusMode(""),
+    M_stimCurrent(20.0),
     M_restPotential(-84.)
 {}
 
 HeartDiffusionFunctor::HeartDiffusionFunctor ( GetPot& dataFile ):
     M_dataFile(dataFile),
     M_stimulusMode(dataFile("stim/mode", "S1S2")),
+    M_stimCurrent(dataFile("stim/array/current", 20.0)),
     M_restPotential(dataFile ("electric/physics/u0", -84.))
 {
+    // Array electordes
+    Int elec_numX(dataFile("stim/array/numX", 3));
+    Int elec_numY(dataFile("stim/array/numY", 3));
+    Real elec_off(dataFile("stim/array/offset", 0.1));
+    Real elec_int(dataFile("stim/array/interval", 0.1));
+    Real elec_size(dataFile("stim/array/size", 0.05));
+    
+    for(int i=0; i<elec_numY;i++){
+      for(int j=0; j<elec_numX; j++){
+        axisElecPtrType elec(new axisElecType());
+        elec->addAxis(0, Real(elec_off + j * elec_int), elec_size);
+        elec->addAxis(1, Real(elec_off + i * elec_int), elec_size);
+        this->vecPtrStimElectrode.push_back(static_cast<elecPtrType>(elec));
+      }
+    }
+    
     if(M_stimulusMode == "S1S2"){
 
       Int S1_count(dataFile("stim/S1S2/S1_count", 1));
@@ -25,7 +43,7 @@ HeartDiffusionFunctor::HeartDiffusionFunctor ( GetPot& dataFile ):
       Real S1_duration(dataFile("stim/S1S2/S1_duration", 5));
       Real S1_interval(dataFile("stim/S1S2/S1_interval", 400));
       Real S1_distance(dataFile("stim/S1S2/S1_distance", 0.5));
-      Real S1_current(dataFile("Sstim/S1S2/1_current", 20.0));
+      Real S1_current(dataFile("Sstim/S1S2/S1_current", 20.0));
       Real S2_start(dataFile("stim/S1S2/S2_start", 100));
       Real S2_duration(dataFile("stim/S1S2/S2_duration", 5));
       Real S2_distance(dataFile("stim/S1S2/S2_distance", 0.5));
@@ -54,6 +72,21 @@ HeartDiffusionFunctor::HeartDiffusionFunctor ( GetPot& dataFile ):
       this->vecPtrStimElectrode.push_back(static_cast<elecPtrType>(S1));
       this->vecPtrStimElectrode.push_back(static_cast<elecPtrType>(S2));
     } // S1S2 setting
+
+    
+}
+
+void 
+HeartDiffusionFunctor::stimulate(unsigned int time, unsigned int idElectrode)
+{
+  //Real current(20.0);
+  if( idElectrode < vecPtrStimElectrode.size()){
+    this->vecPtrStimElectrode[idElectrode]->setCurrent(
+        time, 
+        //current
+        M_stimCurrent
+    );
+  }
 }
 
 Real
@@ -90,6 +123,7 @@ Real HeartDiffusionFunctor::setZeroScalar (
 {
     return 0.;
 }
+
 
 // ===================================================
 // Get Methods

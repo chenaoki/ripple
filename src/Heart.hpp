@@ -120,6 +120,7 @@ public:
 
 public:
     void step();
+    void stimulate(unsigned int idElectrode);
     void computeRhs ( vector_Type& rhs );
 
 private:

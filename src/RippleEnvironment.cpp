@@ -52,6 +52,7 @@ void observe(void)
    }
 }
 
+
 const char* env_init()
 {    
    
@@ -111,24 +112,34 @@ const observation_t *env_start()
 
 const reward_observation_terminal_t *env_step(const action_t *this_action)
 {
-   static int cnt = 100;
-	
-   int episode_over=0;
-	double the_reward=0;
+  static int cnt = 0;
+  int episode_over=0;
+  double the_reward=0;
 
-   if(ptrHeart)
+  std::cout << "env_step @" << ++cnt << std::endl;
+  if(cnt>=2000){
+    episode_over=1;
+    the_reward=-1;
+  }
+
+  // Make sure the action is valid 
+  try{
+    assert(this_action->numInts==1);
+    if(ptrHeart){
+      if(this_action->intArray[0] >= 0){
+        std::cout << "Action : " << this_action->intArray[0] << std::endl;
+        ptrHeart->stimulate(this_action->intArray[0]);
+      }
       ptrHeart->step();
-   observe();
-   
-   std::cout << "env_step @" << cnt << std::endl;
-	if(--cnt<=0){
-		episode_over=1;
-		the_reward=-1;
-	}
-	this_reward_observation.reward = the_reward;
-	this_reward_observation.terminal = episode_over;
+      observe();
+    }
+  }catch(...){
+    episode_over=1;
+  }
+  this_reward_observation.terminal = episode_over;
+  this_reward_observation.reward = the_reward;
 
-	return &this_reward_observation;
+  return &this_reward_observation;
 }
 
 void env_cleanup()
