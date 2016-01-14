@@ -47,7 +47,7 @@ void observe(void)
 {
    if( ptrHeart ){
       for(int i = 0; i < SIZE_OBS; i++){
-         this_observation.doubleArray[i] = 0.0; //*(ptrHeart->M_Uptr)[i];
+         this_observation.doubleArray[i] = (*(ptrHeart->M_Uptr))[i];
       }
    }
 }
