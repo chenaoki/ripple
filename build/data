@@ -4,208 +4,162 @@
 #----------------------------------------------------------------
 
 [exporter]
-multimesh  = false
-save       = 1
-post_dir = ./
-type = hdf5
+  multimesh  = false
+  save       = 1
+  post_dir = ./
+  type = hdf5
+[../]
+
+[amesos]
+  solvertype =  Amesos_UMFPACK # Amesos_KLU or Amesos_Umfpack
+[../]
+
+[partitioner]
+  overlap = 2
+[../]
+
+[schwarz]
+  reordering_type = none #metis, rcm, none
+  filter_singletons = true
+[../]
+
+[smoother]
+# smoother type
+# Aztec, IFPACK, Jacobi, ML symmetric Gauss-Seidel, symmetric Gauss-Seidel,
+# ML Gauss-Seidel, Gauss-Seidel, Chebyshev, MLS, Hiptmair, Amesos-KLU,
+# Amesos-Superlu, Amesos-UMFPACK, Amesos-Superludist, Amesos-MUMPS,
+# user-defined, SuperLU, IFPACK-Chebyshev, self, do-nothing,
+# IC, ICT, ILU, ILUT
+  type                    = IFPACK
+  pre_or_post             = pre
+  sweeps                  = 3
+  damping_factor          = 1
+[../]
+
+[coarse]
+  type                    = Amesos-UMFPACK #Amesos-KLU
+  sweeps                  = 1
+  pre_or_post             = both
+  max_size                = 200
+[../]
+
+[repartition]
+  enable                  = 1
+  partitioner             = PerMETIS
+  max_min_ration          = 1.3
+  min_per_proc            = 500
+[../]
+
+[energy_minimization]
+  enable          = true
+  type            = 3
+[../]
+
+[ifpack]
+  overlap     = 2
+[../]
+
+
+[fact]
+  ilut_level-of-fill            = 1
+  drop_tolerance                = 1.e-5
+  relax_value                   = 0
+[../]
+
+
+[solver]
+  solver          = gmres    #cg , gmres, cgs, tfqmr, bicgstab, slu, symmlq, fixed_pt, lu
+  scaling         = none
+  output          = all # all, warnings , none , last
+  conv            = rhs
+  max_iter        = 100
+  kspace          = 200 #100
+#precond         = dom_decomp #none,jacobi,sym_gs,neumann,ls,smoother,dom_decomp
+  subdomain_solve = icc #ilu, ilut
+  overlap         = 1
+  ilut_fill       = 5 #2
+  graph_fill      = 0
+  drop            = 1.e-5 #1.e-4
+  tol             = 1.00e-7 #1.00e-5
+  keep_info       = 1
+[../] #
+
+[prec]
+  reuse           = true
+  overlap         = 1
+  droptol         = 1.e-7 #1.e-5
+  fill            = 2 #1
+  prectype        = Ifpack
+[../] #
 
 [electric]
+  verbose         = 0                     # verbose during mesh-reading
+  diagonalize     = 1 #0 # weight, 0=off
 
-[./physics]
+  [./physics]
+    test_case   = 2             # in particular for b.c. condition
+    ion_model = 2               # 1: RM   2: LR   3: Mitchell & Schaeffer 4: OHaraRudy
+    u0 = -84.                   # 0.: RM    -84.: LR
+    Chi     = 1e3               #cm^-1
+    Cm      = 1e-3              #mF/cm^2
+    tau_in    = 0.8
+    tau_out   = 18.0
+    tau_open  = 100.0
+    tau_close = 100.0
+    vcrit     =  -67.0
+    v_min     =  -80.0
+    v_max     =  20.0
+    reac_amp  =  0.2        #0.05
+    Time_period       = 700.0
+    Iapp_RV_angle     = 360.0
+    Iapp_LV_angle     = 360.0
+    Iapp_stim_time_RV = 6.0
+    Iapp_stim_time_LV = 10.0
+    Ventricular_Fibrillation = 0
+    nb_fibrillation_sources  = 20
+  [../]
 
-test_case   = 2             # in particular for b.c. condition
-ion_model = 2               # 1: RM     2: LR
-u0 = -84.                   # 0.: RM    -84.: LR
+  [./time_discretization]
+    initialtime     = 0.
+    endtime         = 800 
+    timestep        = 1
+    BDF_order       = 1
+  [../]
 
-Chi     = 1e3               #cm^-1
-Cm      = 1e-3              #mF/cm^2
-
-#Monodomain conductivity
-#RM
-#sigmal     = 0.0328        #O^-1cm^-1
-#sigmat     =  0.00699      #O^-1cm^-1
-#LR
-#sigmal     = 1.2e-3        #O^-1cm^-1
-#sigmat     =  2.56e-4      #O^-1cm^-1
-
-#Bidomain conductivity
-#RM
-#sigmal_i       = 8.19e-2       #O^-1cm^-1
-#sigmat_i       = 8.6e-3        #O^-1cm^-1
-#sigmal_e       = 5.46e-2       #O^-1cm^-1
-#sigmat_e       = 3.69e-2       #O^-1cm^-1
-
-#LR
-sigmal_i        = 3.0e-3        #O^-1cm^-1
-sigmat_i        = 3.1525e-4     #O^-1cm^-1
-sigmal_e        = 2.0e-3        #O^-1cm^-1
-sigmat_e        = 1.3514e-3     #O^-1cm^-1
-
-
-
-##***********************************************************************##
-#Mitchell & Schaeffer: (active only with #define REO_CASE)
-#sigmal_i       = 3.0e-3        #O^-1cm^-1
-#sigmal_e       = 3.0e-3        #O^-1cm^-1
-#sigmat_i       = 3.0e-4        #O^-1cm^-1
-#sigmat_e       = 1.2e-3        #O^-1cm^-1
-
-tau_in    = 0.8
-tau_out   = 18.0
-tau_open  = 100.0
-tau_close = 100.0
-vcrit     =  -67.0
-v_min     =  -80.0
-v_max     =  20.0
-reac_amp  =  0.2        #0.05
-
-Time_period       = 700.0
-Iapp_RV_angle     = 360.0
-Iapp_LV_angle     = 360.0
-Iapp_stim_time_RV = 6.0
-Iapp_stim_time_LV = 10.0
-Ventricular_Fibrillation = 0
-nb_fibrillation_sources  = 20
-##*****************************************************************##
-
-heart_diff_fct = 0
-
-# case 0: normal diffusion,
-# case 1: reduced diffusion in sphere region
-# case 2: reduced diffusion in cyl region
-# case 3: reduced diffusion in box region
-
-#per reduced_sigma_sphere (heart_diff_fct=1)
-sigma_reduction = '0.1, 1.'
-sphere_center   = '0., 0., 0.'
-sphere_radius   = 0.5
-
-#per reduced_sigma_box (heart_diff_fct=3)
-#sigma_reduction    = '0.001, 1.'
-#box_vertex_min     = '0., 0., 0.'
-#box_vertex_max     = '1., 1., 1.'
-
-
-[../time_discretization]
-initialtime     = 0.
-endtime         = 1000
-timestep        = 1
-BDF_order       = 1
-
-[../space_discretization]
-mesh_dir        = ./meshes/
-mesh_file       = lid16.mesh  #128x128.mesh #ellipsoid5272.mesh
-mesh_type       = .mesh
-has_fibers = 0
-fibers_dir = ./Mesh/
-fibers_file = ellipsoid5272fibers
-fibers_format =  0  # 1 Ensight 0 BB
-
-verbose         = 1                     # verbose during mesh-reading
-diagonalize     = 1 #0 # weight, 0=off
-
-[../miscellaneous]
-verbose         = 1
-
-        [./smoother]
-            # smoother type
-            # Aztec, IFPACK, Jacobi, ML symmetric Gauss-Seidel, symmetric Gauss-Seidel,
-            # ML Gauss-Seidel, Gauss-Seidel, Chebyshev, MLS, Hiptmair, Amesos-KLU,
-            # Amesos-Superlu, Amesos-UMFPACK, Amesos-Superludist, Amesos-MUMPS,
-            # user-defined, SuperLU, IFPACK-Chebyshev, self, do-nothing,
-            # IC, ICT, ILU, ILUT
-            type                    = IFPACK
-            pre_or_post             = pre
-            sweeps                  = 3
-            damping_factor          = 1
-
-            [../coarse]
-            type                    = Amesos-UMFPACK
-            #type                    = Amesos-KLU
-            sweeps                  = 1
-            pre_or_post             = both
-            max_size                = 200
-
-            [../repartition]
-            enable                  = 1
-            partitioner             = ParMETIS
-            max_min_ration          = 1.3
-            min_per_proc            = 500
-
-            [../energy_minimization]
-            enable          = true
-            type            = 3
-            [../]
-
-        # ifpack
-        [../ifpack]
-        overlap     = 2
-
-            [./fact]
-            ilut_level-of-fill            = 1
-            drop_tolerance                = 1.e-5
-            relax_value                   = 0
-
-            [../amesos]
-            solvertype =  Amesos_UMFPACK # Amesos_KLU or Amesos_Umfpack
-
-            [../partitioner]
-            overlap = 2
-
-            [../schwarz]
-            reordering_type = none #metis, rcm, none
-            filter_singletons = true
-
-            [../]
-        [../]
-
-
-
-[../solver]
-solver          = gmres    #cg , gmres, cgs, tfqmr, bicgstab, slu, symmlq, fixed_pt, lu
-scaling         = none
-output          = all # all, warnings , none , last
-conv            = rhs
-max_iter        = 100
-kspace          = 200 #100
-#precond         = dom_decomp #none,jacobi,sym_gs,neumann,ls,smoother,dom_decomp
-subdomain_solve = icc #ilu, ilut
-overlap         = 1
-ilut_fill       = 5 #2
-graph_fill      = 0
-drop            = 1.e-5 #1.e-4
-tol             = 1.00e-7 #1.00e-5
-keep_info       = 1
-
-[../prec]
-
-reuse           = true
-overlap         = 1
-droptol         = 1.e-7 #1.e-5
-fill            = 2 #1
-prectype        = Ifpack
+  [./space_discretization]
+    mesh_dir        = ./meshes/
+    mesh_file       = 65x65x2.mesh #65x65x2.mesh #121x121x2.mesh #lid16.mesh  #128x128.mesh #ellipsoid5272.mesh
+    mesh_type       = .mesh
+    has_fibers = 1
+    fibers_dir = ./fibers/
+    fibers_file = 65x65x2.txt
+    fibers_format =  0  # 1 Ensight 0 BB
+  [../]
+[../] #electric
 
 [stim]
+  mode            = S1S2
 
-mode            = S1S2
+  [./S1S2]
+    S1_count        = 1 
+    S1_start        = 1
+    S1_duration     = 5
+    S1_interval     = 390
+    S1_distance     = 0.2
+    S1_current      = 15.0
+    S2_start        = 395
+    S2_duration     = 10
+    S2_distance     = 0.9
+    S2_current      = 15.0
+  [../]
 
-[./S1S2]
+  [./array]
+    numX            = 3
+    numY            = 3
+    offset          = 0.25
+    interval        = 0.25
+    size            = 0.1
+  [../]
 
-S1_count        = 1 
-S1_start        = 100
-S1_duration     = 5
-S1_interval     = 400
-S1_distance     = 0.1
-S1_current      = 200
-S2_start        = 330
-S2_duration     = 10
-S2_distance     = 0.3
-S2_current      = 25.0
-
-[../array]
-numX            = 3
-numY            = 3
-offset          = 0.25
-interval        = 0.25
-size            = 0.1
+[../] #stim
 
