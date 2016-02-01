@@ -24,6 +24,7 @@
 */
 
 #include "HeartDiffusionModel.hpp"
+#include "HeartIonicSolver.hpp"
 
 namespace LifeV
 {
@@ -102,12 +103,14 @@ HeartDiffusionModel::setup (  const GetPot& dataFile )
 
     switch(dataFile ("electric/physics/ion_model", 1))
     {
-    case EnumIonConductivity::RM:
+    case EnumHeartIonicSolverType::RM:
         M_diffusivity              = dataFile ("electric/physics/D" , 0.0156);  // 0.0156   [1/Ohm/cm]    L^2/T*D,  L=0.099 cm, T=0.63 ms D=1,  //RogersMcCulloch1994
         M_longitudinalConductivity = dataFile ("electric/physics/sigmal", 0.0328);   // 0.0328   [1/Ohm/cm]   sigmal_LR * D_RM/D_LR
         M_transversalConductivity  = dataFile ("electric/physics/sigmat", 0.00699);   // 0.00699  [1/Ohm/cm]   sigmat_LR * D_RM/D_LR
         break;
-    case EnumIonConductivity::LR:
+    case EnumHeartIonicSolverType::LR:
+    case EnumHeartIonicSolverType::MS:
+    case EnumHeartIonicSolverType::OR:
         M_diffusivity = dataFile ("electric/physics/D" , 5.7e-4); // 5.7e-4 [1/Ohm/cm]              sigmal/3 + sigmat*2/3
         M_longitudinalConductivity = dataFile ("electric/physics/sigmal", 1.2e-3); // 1.2e-3  [1/Ohm/cm]   sigmal_i*sigmal_e/(sigmal_i+sigmal_e)    ColliPavarinoTaccardi2005
         M_transversalConductivity  = dataFile ("electric/physics/sigmat", 2.56e-4); // 2.56e-4 [1/Ohm/cm]   sigmat_i*sigmat_e/(sigmat_i+sigmat_e)    ColliPavarinoTaccardi2005

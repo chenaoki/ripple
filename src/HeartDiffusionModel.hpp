@@ -38,12 +38,6 @@ Base class which holds usual data for the Monodomain model solvers
 */
 class HeartDiffusionModel : public MeshData, public TimeData
 {
-public:
-    enum EnumIonConductivity{
-        RM = 1,
-        LR
-    };
-
 private:
     // Electrical properties
     Real        M_diffusivity;

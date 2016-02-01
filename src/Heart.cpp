@@ -113,23 +113,30 @@ M_Ueptr(NULL),
         M_commPtr)
     );
 
-    switch ( dataFile ("electric/physics/ion_solver", 1)  ){
-    case 1:
+    switch ( dataFile ("electric/physics/ion_model", 1)  ){
+    case EnumHeartIonicSolverType::RM:
         M_ionicSolverPtr.reset (new RogersMcCulloch< mesh_Type > (
             M_ionData,
             *localMeshPtr,
             *M_uFESpacePtr,
             *M_commPtr) );
         break;
-    case 2:
+    case EnumHeartIonicSolverType::LR:
         M_ionicSolverPtr.reset (new LuoRudy< mesh_Type > (
             M_ionData,
             *localMeshPtr,
             *M_uFESpacePtr,
             *M_commPtr) );
         break;
-    case 3:
+    case EnumHeartIonicSolverType::MS:
         M_ionicSolverPtr.reset (new MitchellSchaeffer< mesh_Type > (
+            M_ionData,
+            *localMeshPtr,
+            *M_uFESpacePtr,
+            *M_commPtr) );
+        break;
+    case EnumHeartIonicSolverType::OR:
+        M_ionicSolverPtr.reset (new OHaraRudy< mesh_Type > (
             M_ionData,
             *localMeshPtr,
             *M_uFESpacePtr,

@@ -43,7 +43,7 @@
 #include "HeartIonicSolver.hpp"
 
 #ifdef BIDOMAIN
-#include <lifev/heart/solver/HeartBidomainSolver.hpp>
+#include "HeartBidomainSolver.hpp"
 #endif
 
 namespace LifeV
