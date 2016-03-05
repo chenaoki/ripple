@@ -1,29 +1,3 @@
-//@HEADER
-/*
-*******************************************************************************
-
-    Copyright (C) 2004, 2005, 2007 EPFL, Politecnico di Milano, INRIA
-    Copyright (C) 2010 EPFL, Politecnico di Milano, Emory University
-
-    This file is part of LifeV.
-
-    LifeV is free software; you can redistribute it and/or modify
-    it under the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    LifeV is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with LifeV.  If not, see <http://www.gnu.org/licenses/>.
-
-*******************************************************************************
-*/
-//@HEADER
-
 #include <Epetra_ConfigDefs.h>
 #ifdef EPETRA_MPI
 #include <mpi.h>
@@ -64,12 +38,12 @@ M_Uptr(NULL),
 M_Fptr(NULL)
 #ifdef BIDOMAIN
 , M_FESpacePtr ( NULL ),
-M_Ueptr(NULL),
+M_Ueptr(NULL)
 #endif
 {
 
     // check params
-   std::string uOrder =  dataFile ( "electric/space_discretization/u_order", "P1");
+    std::string uOrder =  dataFile ( "electric/space_discretization/u_order", "P1");
     if ( uOrder.compare ("P1") != 0 ){
         throw HeartException("Heart exception");
     }
@@ -95,7 +69,7 @@ M_Ueptr(NULL),
     MeshPartitioner< mesh_Type >   meshPart (fullMeshPtr, M_commPtr);
     localMeshPtr = meshPart.meshPartition();
 
-     // FE space
+    // FE space
     M_uFESpacePtr.reset(new feSpace_Type (
         localMeshPtr,
         feTetraP1,
@@ -105,13 +79,35 @@ M_Ueptr(NULL),
         M_commPtr)
     );
 
-     // Electric Solver
+#ifndef BIDOMAIN
+    // Electric Solver
     M_elecSolverPtr.reset( new HeartDiffusionSolver< HeartDiffusionModel, RegionMesh<LinearTetra > >(
         M_elecModel,
         *M_uFESpacePtr,
         M_bcH,
         M_commPtr)
     );
+#else // BIDOMAIN
+    
+    // FE space
+    M_FESpacePtr.reset(new feSpace_Type (
+        localMeshPtr,
+        feTetraP1,
+        quadRuleTetra15pt,
+        quadRuleTria3pt,
+        1,
+        M_commPtr)
+    );
+
+    // Electric Solver
+    M_elecSolverPtr.reset( new HeartBidomainSolver< RegionMesh<LinearTetra > >(
+        M_elecModel,
+        *M_FESpacePtr, 
+        *M_uFESpacePtr,
+        M_bcH,
+        M_commPtr)
+    );
+#endif
 
     switch ( dataFile ("electric/physics/ion_model", 1)  ){
     case EnumHeartIonicSolverType::RM:
@@ -160,8 +156,9 @@ M_Ueptr(NULL),
 
     // Elec solver
     M_elecSolverPtr->setup ( dataFile );
+#ifndef BIDOMAIN
     M_elecSolverPtr->initialize ( M_elecFctrPtr->initialScalar() );
-#ifdef BIDOMAIN
+#else // BIDOMAIN
     M_elecSolverPtr->initialize ( M_elecFctrPtr->initialScalar(), M_elecFctrPtr->zeroScalar() );
 #endif
     M_elecSolverPtr->buildSystem( );
@@ -268,7 +265,7 @@ Heart::step()
 
 }
 
-
+#ifndef BIDOMAIN
 void
 Heart::computeRhs ( vector_Type& rhs)
 {
@@ -305,7 +302,10 @@ Heart::computeRhs ( vector_Type& rhs)
         }
 
         M_ionicSolverPtr->updateElementSolution (eleIDu);
-        M_ionicSolverPtr->computeIonicCurrent (M_elecModel.membraneCapacitance(), elvec_Iion, elvec_u, M_elecSolverPtr->potentialFESpace() );
+        M_ionicSolverPtr->computeIonicCurrent (
+            M_elecModel.membraneCapacitance(), 
+            elvec_Iion, elvec_u, 
+            M_elecSolverPtr->potentialFESpace() );
 
         //! Computing the current source of the righthand side, repeated
         AssemblyElemental::source (M_elecFctrPtr->stimulus(),
@@ -320,20 +320,28 @@ Heart::computeRhs ( vector_Type& rhs)
                                    1);
 
         //! Assembling the righthand side
-        for ( UInt i = 0 ; i < M_elecSolverPtr->potentialFESpace().fe().nbFEDof() ; i++ )
+        for ( UInt i = 0 ; i < nbNode ; i++ )
         {
             Int  ig = M_elecSolverPtr->potentialFESpace().dof().localToGlobalMap ( eleIDu, i );
-            rhs.sumIntoGlobalValues (ig, (M_elecModel.conductivityRatio() * elvec_Iapp.vec() [i] +
-                                          elvec_Iapp.vec() [i + nbNode]) /
-                                     (1 + M_elecModel.conductivityRatio() ) + M_elecModel.volumeSurfaceRatio() * elvec_Iion.vec() [i] );
+            rhs.sumIntoGlobalValues ( ig, 
+                ( M_elecModel.conductivityRatio() * elvec_Iapp.vec() [i] 
+                  + elvec_Iapp.vec() [i + nbNode]
+                ) / (1 + M_elecModel.conductivityRatio() ) 
+                + M_elecModel.volumeSurfaceRatio() * elvec_Iion.vec() [i] 
+            );
         }
     }
     rhs.globalAssemble();
-    Real coeff = M_elecModel.volumeSurfaceRatio() * M_elecModel.membraneCapacitance() / M_elecModel.timeStep();
+
     vector_Type tmpvec (M_elecSolverPtr->solutionTransmembranePotential() );
+    Real coeff = M_elecModel.volumeSurfaceRatio();
+    coeff *= M_elecModel.membraneCapacitance();
+    coeff /= M_elecModel.timeStep();
     tmpvec *= coeff;
     rhs += M_elecSolverPtr->massMatrix() * tmpvec;
+
     MPI_Barrier (MPI_COMM_WORLD);
+
     chrono.stop();
     if (verbose)
     {
@@ -341,7 +349,7 @@ Heart::computeRhs ( vector_Type& rhs)
     }
 }
 
-#ifdef BIDOMAIN
+#else //BIDOMAIN
 void
 Heart::computeRhs ( vector_Type& rhs )
 {
@@ -368,16 +376,22 @@ Heart::computeRhs ( vector_Type& rhs )
         elvec_Iapp.zero();
 
         UInt eleIDu = M_elecSolverPtr->potentialFESpace().fe().currentLocalId();
+        UInt eleID = M_elecSolverPtr->potentialFESpace().fe().currentLocalId();
         UInt nbNode = ( UInt ) M_elecSolverPtr->potentialFESpace().fe().nbFEDof();
+        UInt totalUDof  = M_elecSolverPtr->potentialFESpace().map().map (Unique)->NumGlobalElements();
+
+        //! Filling local elvec_u with potential values in the nodes
         for ( UInt iNode = 0 ; iNode < nbNode ; iNode++ )
         {
             Int ig = M_elecSolverPtr->potentialFESpace().dof().localToGlobalMap ( eleIDu, iNode );
             elvec_u.vec() [ iNode ] = uVecRep[ig];
         }
 
-        UInt eleID = M_elecSolverPtr->potentialFESpace().fe().currentLocalId();
         M_ionicSolverPtr->updateElementSolution (eleID);
-        M_ionicSolverPtr->computeIonicCurrent (M_elecModel.membraneCapacitance(), elvec_Iion, elvec_u, M_elecSolverPtr->potentialFESpace() );
+        M_ionicSolverPtr->computeIonicCurrent (
+            M_elecModel.membraneCapacitance(), 
+            elvec_Iion, elvec_u, 
+            M_elecSolverPtr->potentialFESpace() );
 
         //! Computing Iapp
         AssemblyElemental::source (M_elecFctrPtr->stimulus(),
@@ -389,23 +403,31 @@ Heart::computeRhs ( vector_Type& rhs )
                                    M_elecSolverPtr->potentialFESpace().fe(),
                                    M_elecModel.time(),
                                    1);
-        UInt totalUDof  = M_elecSolverPtr->potentialFESpace().map().map (Unique)->NumGlobalElements();
 
+        //! Assembling the righthand side
         for ( UInt iNode = 0 ; iNode < nbNode ; iNode++ )
         {
             Int ig = M_elecSolverPtr->potentialFESpace().dof().localToGlobalMap ( eleIDu, iNode );
-            rhs.sumIntoGlobalValues (ig, elvec_Iapp.vec() [iNode] +
-                                     M_elecModel.volumeSurfaceRatio() * elvec_Iion.vec() [iNode] );
+            rhs.sumIntoGlobalValues (ig, 
+                elvec_Iapp.vec() [iNode] 
+                + M_elecModel.volumeSurfaceRatio() * elvec_Iion.vec() [iNode] 
+            );
             rhs.sumIntoGlobalValues (ig + totalUDof,
-                                     -elvec_Iapp.vec() [iNode + nbNode] -
-                                     M_elecModel.volumeSurfaceRatio() * elvec_Iion.vec() [iNode] );
+                - elvec_Iapp.vec() [iNode + nbNode] 
+                - M_elecModel.volumeSurfaceRatio() * elvec_Iion.vec() [iNode] 
+            );
         }
     }
     rhs.globalAssemble();
 
-    rhs += M_elecSolverPtr->matrMass() * M_elecModel.volumeSurfaceRatio() *
-           M_elecModel.membraneCapacitance() * M_elecSolverPtr->BDFIntraExtraPotential().time_der (M_elecModel.timeStep() );
-
+    vector_Type tmpvec (M_elecSolverPtr->solutionTransmembranePotential() );
+    //vector_Type tmpvec (M_elecSolverPtr->BDFIntraExtraPotential() );
+    Real coeff = M_elecModel.volumeSurfaceRatio();
+    coeff *= M_elecModel.membraneCapacitance();
+    coeff /= M_elecModel.timeStep();
+    tmpvec *= coeff;
+    rhs += M_elecSolverPtr->matrMass() * tmpvec;
+    
     MPI_Barrier (MPI_COMM_WORLD);
 
     chrono.stop();

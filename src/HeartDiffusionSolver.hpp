@@ -1,32 +1,4 @@
-//@HEADER
-/*
-*******************************************************************************
-    Copyright (C) 2004, 2005, 2007 EPFL, Politecnico di Milano, INRIA
-    Copyright (C) 2010 EPFL, Politecnico di Milano, Emory University
-    This file is part of LifeV.
-    LifeV is free software; you can redistribute it and/or modify
-    it under the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-    LifeV is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    Lesser General Public License for more details.
-    You should have received a copy of the GNU Lesser General Public License
-    along with LifeV.  If not, see <http://www.gnu.org/licenses/>.
-*******************************************************************************
-*/
-//@HEADER
-/*!
-  @file
-  @brief Class for solving the Monodomain equations in electrophysiology.
-  @date 11-2007
-  @author Lucia Mirabella <lucia.mirabella@mail.polimi.it> and Mauro Perego <mauro.perego@polimi.it>
-  @contributors J.Castelneau (INRIA), Ricardo Ruiz-Baier <ricardo.ruiz@epfl.ch>
-  @mantainer Ricardo Ruiz-Baier <ricardo.ruiz@epfl.ch>
-  @last update 11-2010
- */
-#ifndef _HEARTMODELSOLVER_H_
+#ifndef _MONODOMAINSOLVER_H_
 #define _MONODOMAINSOLVER_H_
 
 #include <boost/shared_ptr.hpp>
