@@ -2,8 +2,8 @@ CC=/usr/bin/mpicxx
 
 LIFEV_LIB_DIR=/root/simenv/lifev/install/lib
 LIFEV_INC_DIR=/root/simenv/lifev/install/include
-TRILINOS_LIB_DIR=/root/simenv/trilinos/install/lib
-TRILINOS_INC_DIR=/root/simenv/trilinos/install/include
+TRILINOS_LIB_DIR=/root/simenv/Trilinos/install/lib
+TRILINOS_INC_DIR=/root/simenv/Trilinos/install/include
 
 CFLAGS=-std=c++11 -O3 \
 	-I../src \
@@ -15,5 +15,5 @@ CFLAGS=-std=c++11 -O3 \
 
 LFLAGS=-std=c++11 -O3 -L"$(LIFEV_LIB_DIR)" -L"$(TRILINOS_LIB_DIR)"
 
-LIBS= -rdynamic -llifevheart -llifevcore -lml -lpthread -lifpack -lamesos -lanasazitpetra -lModeLaplace -lanasaziepetra -lanasazi -lthyraepetra -lthyracore -lrtop -lbelostpetra -lbelosepetra -lbelos -ltpetraext -ltpetrainout -ltpetra -lkokkostsqr -ltpetrakernels -ltpetraclassiclinalg -ltpetraclassicnodeapi -ltpetraclassic -lkokkosalgorithms -lkokkoscontainers -laztecoo -lzoltan -lepetraext -ltriutils -lepetra -lteuchoskokkoscomm -lteuchoskokkoscompat -lteuchosremainder -lteuchosnumerics -lteuchoscomm -lteuchosparameterlist -lteuchoscore -lkokkoscore -lumfpack -lamd -lhdf5 -lz -lparmetis -lmetis -llapack -lblas -Wl,-rpath,~/simenv/trilinos/install/lib `pkg-config --libs opencv`
+LIBS= -rdynamic -llifevheart -llifevcore -lml -lpthread -lifpack -lamesos -lanasazitpetra -lModeLaplace -lanasaziepetra -lanasazi -lthyraepetra -lthyracore -lrtop -lbelostpetra -lbelosepetra -lbelos -ltpetraext -ltpetrainout -ltpetra -lkokkostsqr -ltpetrakernels -ltpetraclassiclinalg -ltpetraclassicnodeapi -ltpetraclassic -lkokkosalgorithms -lkokkoscontainers -laztecoo -lzoltan -lepetraext -ltriutils -lepetra -lteuchoskokkoscomm -lteuchoskokkoscompat -lteuchosremainder -lteuchosnumerics -lteuchoscomm -lteuchosparameterlist -lteuchoscore -lkokkoscore -lumfpack -lamd -lhdf5 -lz -lcholmod -lparmetis -lmetis -llapack -lblas -Wl,-rpath,~/simenv/trilinos/install/lib `pkg-config --libs opencv`
 

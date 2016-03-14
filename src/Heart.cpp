@@ -31,14 +31,14 @@ M_elecModel(dataFile),
 M_ionData(dataFile),
 M_commPtr(new Epetra_MpiComm ( MPI_COMM_WORLD )),
 M_elecFctrPtr ( new HeartDiffusionFunctor ( dataFile )),
-M_elecSolverPtr(NULL),
-M_ionicSolverPtr(NULL),
-M_uFESpacePtr ( NULL ),
-M_Uptr(NULL),
-M_Fptr(NULL)
+M_elecSolverPtr(),
+M_ionicSolverPtr(),
+M_uFESpacePtr (  ),
+M_Uptr(),
+M_Fptr()
 #ifdef BIDOMAIN
-, M_FESpacePtr ( NULL ),
-M_Ueptr(NULL)
+, M_FESpacePtr (  ),
+M_Ueptr()
 #endif
 {
 
